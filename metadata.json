@@ -1,0 +1,7 @@
+{
+  "name": "Interactive Personal Profile",
+  "description": "A modern, responsive personal profile page with interactive features like a visit counter, like/dislike buttons, and a comment section, all integrated with Discord webhooks.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

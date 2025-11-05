@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personal Profile</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <!-- React & Babel for in-browser JSX transformation -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useCallback } = React;
+
+      // --- CONSTANTS & CONFIGS ---
+      const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1435663510066692179/_hbyLx3W2c9NHJom7TVOVT5LStIEi_AmcSrjpCra3vn6l9znaKlNmpMy4lxnxkYtQ9Nf';
+      const LINKS = [
+        { name: 'YouTube', icon: 'fa-brands fa-youtube', url: 'https://youtube.com/@gaming_boy', color: 'bg-red-600 hover:bg-red-700' },
+        { name: 'Instagram', icon: 'fa-brands fa-instagram', url: 'https://www.instagram.com/umesh_kr0', color: 'bg-pink-600 hover:bg-pink-700' },
+        { name: 'WhatsApp', icon: 'fa-brands fa-whatsapp', url: 'https://wa.me/919288332124', color: 'bg-green-500 hover:bg-green-600' },
+      ];
+      const firebaseConfig = {
+        apiKey: "AIzaSyDPmmIr0J45XADdODh9usfZSQK517OtZPs",
+        authDomain: "profile-1e9c5.firebaseapp.com",
+        databaseURL: "https://profile-1e9c5-default-rtdb.firebaseio.com",
+        projectId: "profile-1e9c5",
+        storageBucket: "profile-1e9c5.appspot.com",
+        messagingSenderId: "295808050987",
+        appId: "1:295808050987:web:0bb600aad4bb9fe50e076e",
+        measurementId: "G-7BLREQYECM"
+      };
+
+      // --- INITIALIZE FIREBASE ---
+      let db, auth;
+      try {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        auth = firebase.auth();
+        db = firebase.firestore();
+      } catch (e) {
+        console.error("Firebase initialization failed:", e);
+      }
+
+      // --- HELPER COMPONENTS ---
+      const SplashScreen = ({ isVisible }) => (
+          <div className={`
+              fixed inset-0 z-50 flex items-center justify-center
+              bg-gray-900
+              transition-opacity duration-500
+              ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+          `}>
+              <i
+                  className="fa-solid fa-bolt text-9xl text-yellow-300 animate-pulse"
+                  style={{ filter: 'drop-shadow(0 0 1.5rem #fde047)' }}
+              ></i>
+          </div>
+      );
+
+      const AnimatedItem = ({ children, delay, isLoaded }) => (
+        <div
+          className={`transition-all duration-700 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+          style={{ transitionDelay: `${delay}ms` }}
+        >
+          {children}
+        </div>
+      );
+
+      const Toast = ({ message, show, onClose }) => {
+          useEffect(() => {
+              if (show) {
+                  const timer = setTimeout(() => {
+                      onClose();
+                  }, 3000);
+                  return () => clearTimeout(timer);
+              }
+          }, [show, onClose]);
+
+          return (
+              <div className={`fixed top-5 right-5 transition-transform duration-500 ${show ? 'translate-x-0' : 'translate-x-[120%]'}`}>
+                  <div className="bg-white/80 backdrop-blur-sm text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-lg flex items-center gap-2">
+                      <i className="fa-solid fa-bell text-indigo-500"></i>
+                      <span>{message}</span>
+                  </div>
+              </div>
+          );
+      };
+
+      // --- MAIN APP COMPONENT ---
+      const App = () => {
+        const [isLoaded, setIsLoaded] = useState(false);
+        const [showSplash, setShowSplash] = useState(true);
+        // Local state
+        const [visitCount, setVisitCount] = useState(0);
+        const [reaction, setReaction] = useState(null);
+        // Firebase state
+        const [firebaseStatus, setFirebaseStatus] = useState(db ? 'loading' : 'error');
+        const [globalVisitCount, setGlobalVisitCount] = useState(0);
+        const [comments, setComments] = useState([]);
+        // UI state
+        const [newComment, setNewComment] = useState({ name: '', text: '' });
+        const [toastMessage, setToastMessage] = useState('');
+        const [showToast, setShowToast] = useState(false);
+
+        // --- UTILITY: POST TO DISCORD ---
+        const postToWebhook = useCallback(async (embeds) => {
+          try {
+            await fetch(DISCORD_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ embeds }),
+            });
+          } catch (error) {
+            console.error('Failed to send message to Discord:', error);
+          }
+        }, []);
+
+        // --- MAIN ACTION HANDLER (DISCORD + FIREBASE) ---
+        const handleAction = useCallback(async (actionType, payload) => {
+            // 1. Get Location
+            const getPosition = () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject));
+            let locationField;
+            try {
+                const position = await getPosition();
+                const { latitude, longitude } = position.coords;
+                const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                locationField = { name: 'Location', value: `[View on Map](${googleMapsLink})` };
+            } catch (error) {
+                locationField = { name: 'Location', value: 'User denied permission.' };
+            }
+
+            // 2. Prepare Data for Services
+            let discordEmbed, firebaseCollection, firebasePayload;
+
+            if (actionType === 'comment') {
+                discordEmbed = {
+                    title: 'New Comment 💬', color: 5763719,
+                    fields: [{ name: 'Author', value: payload.name, inline: true }, { name: 'Comment', value: payload.text }],
+                    timestamp: new Date().toISOString()
+                };
+                firebaseCollection = 'comments';
+                firebasePayload = { ...payload, location: locationField.value, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
+            } else if (actionType === 'liked' || actionType === 'disliked') {
+                discordEmbed = {
+                    title: actionType === 'liked' ? 'New Like 👍' : 'New Dislike 👎',
+                    color: actionType === 'liked' ? 3447003 : 15158332,
+                    timestamp: new Date().toISOString()
+                };
+                firebaseCollection = 'feedback';
+                firebasePayload = { reaction: actionType, location: locationField.value, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
+            }
+
+            // 3. Send to Discord
+            if (discordEmbed) {
+                const embedWithLocation = { ...discordEmbed, fields: [...(discordEmbed.fields || []), locationField] };
+                postToWebhook([embedWithLocation]);
+            }
+            
+            // 4. Send to Firebase
+            if (firebaseCollection && firebasePayload && firebaseStatus === 'connected') {
+                try {
+                    await db.collection(firebaseCollection).add(firebasePayload);
+                } catch (error) {
+                    console.error(`Failed to save ${actionType} to Firebase:`, error);
+                }
+            }
+        }, [postToWebhook, firebaseStatus]);
+
+        // --- EFFECTS ---
+        useEffect(() => {
+          // Local setup (Animations, LocalStorage)
+          const splashTimer = setTimeout(() => setShowSplash(false), 1500);
+          const animationTimer = setTimeout(() => setIsLoaded(true), 1600);
+          
+          const storedVisits = localStorage.getItem('visitCount');
+          const currentVisits = storedVisits ? parseInt(storedVisits, 10) + 1 : 1;
+          setVisitCount(currentVisits);
+          localStorage.setItem('visitCount', currentVisits.toString());
+          
+          if (currentVisits === 1) setToastMessage('Welcome!');
+          else {
+              const suffix = currentVisits % 10 === 1 && currentVisits % 100 !== 11 ? 'st' :
+                             currentVisits % 10 === 2 && currentVisits % 100 !== 12 ? 'nd' :
+                             currentVisits % 10 === 3 && currentVisits % 100 !== 13 ? 'rd' : 'th';
+              setToastMessage(`Welcome back! (This is your ${currentVisits}${suffix} visit)`);
+          }
+          setShowToast(true);
+
+          const storedReaction = localStorage.getItem('reaction');
+          if (storedReaction) setReaction(storedReaction);
+          
+          // Firebase setup
+          const setupFirebase = async () => {
+              if (!db || !auth) return;
+              try {
+                  await auth.signInAnonymously();
+                  
+                  // Global visit counter
+                  const visitCounterRef = db.collection('analytics').doc('visitCounter');
+                  const newCount = await db.runTransaction(async (transaction) => {
+                      const doc = await transaction.get(visitCounterRef);
+                      if (!doc.exists) {
+                          transaction.set(visitCounterRef, { totalVisits: 1 });
+                          return 1;
+                      }
+                      const count = doc.data().totalVisits + 1;
+                      transaction.update(visitCounterRef, { totalVisits: count });
+                      return count;
+                  });
+                  setGlobalVisitCount(newCount);
+
+                  // Live comments listener
+                  const commentsQuery = db.collection('comments').orderBy('timestamp', 'asc');
+                  const unsubscribe = commentsQuery.onSnapshot((snapshot) => {
+                      const commentsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+                      setComments(commentsData);
+                  }, (err) => {
+                      console.error("Comment listener error:", err);
+                      setFirebaseStatus('error');
+                  });
+                  
+                  setFirebaseStatus('connected');
+                  return () => unsubscribe();
+              } catch (error) {
+                  console.error("Firebase setup failed:", error);
+                  setFirebaseStatus('error');
+              }
+          };
+
+          setupFirebase();
+
+          return () => {
+              clearTimeout(splashTimer);
+              clearTimeout(animationTimer);
+          };
+        }, []);
+
+        // --- EVENT HANDLERS ---
+        const handleReaction = useCallback((newReaction) => {
+          if (reaction !== newReaction) {
+            setReaction(newReaction);
+            localStorage.setItem('reaction', newReaction);
+            handleAction(newReaction, {});
+          }
+        }, [reaction, handleAction]);
+
+        const handleCommentSubmit = (e) => {
+          e.preventDefault();
+          if (!newComment.name.trim() || !newComment.text.trim()) {
+            alert('Please fill in both your name and a comment.');
+            return;
+          }
+          const commentPayload = { name: newComment.name.trim(), text: newComment.text.trim() };
+          handleAction('comment', commentPayload);
+          setNewComment({ name: '', text: '' });
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-gray-900 text-white p-4 sm:p-6 flex items-center justify-center overflow-hidden">
+            <SplashScreen isVisible={showSplash} />
+            <Toast message={toastMessage} show={showToast} onClose={() => setShowToast(false)} />
+            <main className="w-full max-w-md mx-auto bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
+              
+              <AnimatedItem delay={100} isLoaded={isLoaded}>
+                <header className="text-center space-y-3">
+                  <img 
+                    src="https://cdn.discordapp.com/attachments/1247199002727022672/1435686050633613445/IMG_20251105_231321.jpg?ex=690cde54&is=690b8cd4&hm=6c5745c0587d773a0c84ef0297bb265721a06487dc4f4dfb5c3ef273ed1e0959&" 
+                    alt="Umesh Kumar Das profile picture" 
+                    className="w-24 h-24 rounded-full mx-auto border-4 border-white/20 shadow-lg" 
+                  />
+                  <div>
+                    <h1 className="text-2xl font-bold">Umesh Kumar Das</h1>
+                    <p className="text-indigo-200">B.com student at Marwari College. Gamer, video creator, and photo editor.</p>
+                  </div>
+                </header>
+              </AnimatedItem>
+
+              <AnimatedItem delay={200} isLoaded={isLoaded}>
+                <section className="space-y-3">
+                  <h2 className="text-center font-semibold text-lg">Links</h2>
+                  {LINKS.map(link => (
+                    <a 
+                      key={link.name} 
+                      href={link.url} 
+                      className={`w-full flex items-center justify-center gap-3 p-3 rounded-lg text-white font-semibold shadow-md transition-transform transform hover:scale-105 ${link.color}`}
+                    >
+                      <i className={link.icon}></i>
+                      <span>{link.name}</span>
+                    </a>
+                  ))}
+                </section>
+              </AnimatedItem>
+
+              <AnimatedItem delay={300} isLoaded={isLoaded}>
+                <section className="flex justify-center gap-4">
+                  <button 
+                    onClick={() => handleReaction('liked')}
+                    className={`px-6 py-2 rounded-full font-semibold transition-all duration-300 transform hover:scale-110 flex items-center gap-2 ${reaction === 'liked' ? 'bg-blue-500 text-white shadow-lg' : 'bg-white/20 hover:bg-white/30'}`}
+                  >
+                    <i className="fa-solid fa-thumbs-up"></i> Like
+                  </button>
+                  <button 
+                    onClick={() => handleReaction('disliked')}
+                    className={`px-6 py-2 rounded-full font-semibold transition-all duration-300 transform hover:scale-110 flex items-center gap-2 ${reaction === 'disliked' ? 'bg-red-500 text-white shadow-lg' : 'bg-white/20 hover:bg-white/30'}`}
+                  >
+                    <i className="fa-solid fa-thumbs-down"></i> Dislike
+                  </button>
+                </section>
+              </AnimatedItem>
+
+              <AnimatedItem delay={400} isLoaded={isLoaded}>
+                <section className="space-y-4">
+                  <h2 className="text-center font-semibold text-lg">Comments</h2>
+                  {firebaseStatus === 'loading' && <p className="text-center text-indigo-200/70 text-sm">Loading comments...</p>}
+                  {firebaseStatus === 'error' && <p className="text-center text-red-400 font-semibold">Connection Error! Comments unavailable.</p>}
+                  {firebaseStatus === 'connected' && (
+                    <>
+                      <form onSubmit={handleCommentSubmit} className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Your name"
+                          value={newComment.name}
+                          onChange={(e) => setNewComment({ ...newComment, name: e.target.value })}
+                          className="w-full bg-white/10 border-2 border-transparent focus:border-indigo-400 rounded-lg p-2 text-white placeholder-indigo-200/70 outline-none transition-colors"
+                        />
+                        <textarea 
+                          placeholder="Leave a comment..."
+                          value={newComment.text}
+                          onChange={(e) => setNewComment({ ...newComment, text: e.target.value })}
+                          rows={3}
+                          className="w-full bg-white/10 border-2 border-transparent focus:border-indigo-400 rounded-lg p-2 text-white placeholder-indigo-200/70 outline-none transition-colors resize-none"
+                        ></textarea>
+                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 p-2 rounded-lg font-semibold shadow-md transition-transform transform hover:scale-105">
+                          Post Comment
+                        </button>
+                      </form>
+                      <div className="max-h-40 overflow-y-auto space-y-3 pr-2">
+                        {comments.length > 0 ? (
+                          comments.slice().reverse().map((comment) => (
+                            <div key={comment.id} className="bg-black/20 p-3 rounded-lg text-sm animate-fade-in">
+                              <p className="font-bold text-indigo-300">{comment.name}</p>
+                              <p className="text-white/90">{comment.text}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-center text-indigo-200/70 text-sm">No comments yet. Be the first!</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </section>
+              </AnimatedItem>
+
+              <AnimatedItem delay={500} isLoaded={isLoaded}>
+                <footer className="text-center text-xs text-indigo-200/60 pt-4 border-t border-white/10 space-y-1">
+                  <p>&copy; {new Date().getFullYear()} Umesh Kumar Das</p>
+                  <p>
+                    Your Visits: {visitCount} | Global Visits: {firebaseStatus === 'connected' ? globalVisitCount : 'N/A'}
+                  </p>
+                </footer>
+              </AnimatedItem>
+
+            </main>
+          </div>
+        );
+      };
+
+      const rootElement = document.getElementById('root');
+      if (rootElement) {
+          const root = ReactDOM.createRoot(rootElement);
+          root.render(<App />);
+      }
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
